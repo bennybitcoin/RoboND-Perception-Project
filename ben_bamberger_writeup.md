@@ -38,7 +38,7 @@
 
 
 --- Voxel Downsampling ---
-The first step of Exercise 1 was to complete Voxel Grid Downsampling. The goal of Voxel Grid Downsampling is to reduce the data points necessary to represent the 3-D space. This allows for better computational efficiency. Below is the code I sued to implememnt my voxel grid filter.
+The first step of Exercise 1 was to complete Voxel Grid Downsampling. The goal of Voxel Grid Downsampling is to reduce the data points necessary to represent the 3-D space. This allows for better computational efficiency. Below is the code I sued to implement my voxel grid filter.
 
 ```
 vox = cloud.make_voxel_grid_filter()
@@ -143,7 +143,110 @@ cloud_filtered = outlier_filter.filter()
 
 #### 2. Complete Exercise 2 steps: Pipeline including clustering for segmentation implemented.  
 
-#### 2. Complete Exercise 3 Steps.  Features extracted and SVM trained.  Object recognition implemented.
+For this exercise we first went through the same steps required for Exercise 1 shown here:
+
+```
+# TODO: Convert ROS msg to PCL data
+    pcl_data = ros_to_pcl(pcl_msg)
+    
+    # Voxel Grid filter
+    vox = pcl_data.make_voxel_grid_filter()
+
+    LEAF_SIZE = 0.005
+    vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
+
+    cloud_filtered = vox.filter()
+    
+
+    # PassThrough filter
+    pt = cloud_filtered.make_passthrough_filter()
+    filter_axis = 'z'
+    pt.set_filter_field_name(filter_axis)
+    axis_min = 0.6
+    axis_max = 1.1
+    pt.set_filter_limits(axis_min, axis_max)
+
+    cloud_filtered = pt.filter()
+    
+
+    # RANSAC plane segmentation
+    # Create the segmentation object
+    seg = cloud_filtered.make_segmenter()
+
+    # Set the model you wish to fit 
+    seg.set_model_type(pcl.SACMODEL_PLANE)
+    seg.set_method_type(pcl.SAC_RANSAC)
+
+    # Max distance for a point to be considered fitting the model
+    # Experiment with different values for max_distance 
+    # for segmenting the table
+    max_distance = 0.034 #increased from 0.01 because I was recognizing the front of the table as an object
+    seg.set_distance_threshold(max_distance)
+
+
+    # Call the segment function to obtain set of inlier indices and model coefficients
+    inliers, coefficients = seg.segment()
+
+    # Extract inliers
+    cloud_table = cloud_filtered.extract(inliers, negative=False)
+
+    # Extract outliers
+    cloud_objects = cloud_filtered.extract(inliers, negative=True)
+```
+
+--- Euclidian Clustering ---
+After completing the filtering and RANSAC the next step is to preform Euclidean Clustering. First I converted XYZRGB to strictly XYZ point cloud data. Then I constructed a k-d tree from the cloud_objects point cloud. Once that was completed I could complete the cluster extraction
+
+```
+ 
+    # TODO: Euclidean Clustering
+    white_cloud = XYZRGB_to_XYZ(cloud_objects)
+    
+    tree = white_cloud.make_kdtree()
+
+    ec = white_cloud.make_EuclideanClusterExtraction()
+
+    ec.set_ClusterTolerance(0.01) #0.01
+    ec.set_MinClusterSize(100) #25
+    ec.set_MaxClusterSize(25000) #10000
+
+    ec.set_SearchMethod(tree)
+
+    cluster_indices = ec.Extract()
+    #print(cluster_indices) #checked my parameters above for clustering
+```
+
+--- Cluster Mask Point Cloud ---
+
+```
+ # TODO: Create Cluster-Mask Point Cloud to visualize each cluster separately
+    #Assign a color corresponding to each segmented object in scene
+    cluster_color = get_color_list(len(cluster_indices))
+
+    color_cluster_point_list = []
+
+    for j, indices in enumerate(cluster_indices):
+        for i, indice in enumerate(indices):
+            color_cluster_point_list.append([white_cloud[indice][0], white_cloud[indice][1], white_cloud[indice][2], rgb_to_float(cluster_color[j])])
+
+    #Create new cloud containing all clusters, each with unique color
+    cluster_cloud = pcl.PointCloud_PointXYZRGB()
+    cluster_cloud.from_list(color_cluster_point_list)
+
+
+    # TODO: Convert PCL data to ROS messages
+    ros_cloud_objects = pcl_to_ros(cloud_objects)
+    ros_table = pcl_to_ros(cloud_table)
+    ros_cluster_cloud = pcl_to_ros(cluster_cloud)
+
+
+    # TODO: Publish ROS messages
+    pcl_objects_pub.publish(ros_cloud_objects)
+    pcl_table_pub.publish(ros_table)
+    pcl_cluster_pub.publish(ros_cluster_cloud)
+```
+
+#### 3. Complete Exercise 3 Steps.  Features extracted and SVM trained.  Object recognition implemented.
 Here is an example of how to include an image in your writeup.
 
 ![demo-1](https://user-images.githubusercontent.com/20687560/28748231-46b5b912-7467-11e7-8778-3095172b7b19.png)
