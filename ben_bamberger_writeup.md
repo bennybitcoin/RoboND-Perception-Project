@@ -32,16 +32,113 @@
 
 #### 1. Provide a Writeup / README that includes all the rubric points and how you addressed each one.  You can submit your writeup as markdown or pdf.  
 
-You're reading it!
 
 ### Exercise 1, 2 and 3 pipeline implemented
 #### 1. Complete Exercise 1 steps. Pipeline for filtering and RANSAC plane fitting implemented.
 
-    - Voxel Downsampling
-    - Passthrough Filter
-    - Statistical Outlier Remova
-    - RANSAC plane fitting
-    - Cluster Segmentation
+
+--- Voxel Downsampling ---
+The first step of Exercise 1 was to complete Voxel Grid Downsampling. The goal of Voxel Grid Downsampling is to reduce the data points necessary to represent the 3-D space. This allows for better computational efficiency. Below is the code I sued to implememnt my voxel grid filter.
+
+```
+vox = cloud.make_voxel_grid_filter()
+
+LEAF_SIZE = 0.005
+
+
+# Voxel Grid filter
+vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
+
+cloud_filtered = vox.filter()
+filename = 'voxel_downsampled.pcd'
+pcl.save(cloud_filtered, filename)
+```
+
+The provided PCL library had the function already created to enable the voxel grid downsampling. My only decision was to provide the leave size which determines the volumetric size of each averaged voxel. To achieve the results in the pricture below I used a leaf size of 0.005 meters(5mm). You can see though the resolution has decreased by the downsampling it is still very easy to differentiate the items and their locations.
+
+
+--- Passthrough Filter ---
+The Passthrough Filter was used to remove unnecssary data from the 3-D space. Essentially we are cutting down the point cloud to only include the areas of interest. This is done by simply choosing values of an axis to target. In our case we used the z-axis to trim our selection to just the objects on the tabletop. Below is the code I used to complete this:
+
+```
+# PassThrough filter
+pt = cloud_filtered.make_passthrough_filter()
+filter_axis = 'z'
+pt.set_filter_field_name(filter_axis)
+axis_min = 0.6
+axis_max = 1.1
+pt.set_filter_limits(axis_min, axis_max)
+
+cloud_filtered = pt.filter()
+filename = 'pass_through_filtered.pcd'
+pcl.save(cloud_filtered, filename)
+```
+So as you can see, I simply selected to crop my point cloud to only the values which are 0.6m to 1.1m from the Z-plane. The resulting point cloud is shown in the image below:
+
+--- RANSAC plane fitting ---
+Our next step is now to remove the table from the point cloud data. To do this I utilized Random Sample Consesus or "RANSAC" plane fitting. This method helps us determine what points belong to individual objects in the scene. The RANSAC algorithm classifies points as either "inliers" (necessary data) versus "outliers" (unwanted data). I set a maximum distance value of 0.01 meters for the alogrithm to consider fitting the model. Again, we luckily have a RANSAC function built-in with the PCL library:
+
+```
+# RANSAC plane segmentation
+# Create the segmentation object
+seg = cloud_filtered.make_segmenter()
+
+# Set the model you wish to fit 
+seg.set_model_type(pcl.SACMODEL_PLANE)
+seg.set_method_type(pcl.SAC_RANSAC)
+
+# Max distance for a point to be considered fitting the model
+# Experiment with different values for max_distance 
+# for segmenting the table
+max_distance = 0.01
+seg.set_distance_threshold(max_distance)
+
+
+# Call the segment function to obtain set of inlier indices and model coefficients
+inliers, coefficients = seg.segment()
+```
+
+In the code below I save the inliers and the outliers as individual point clouds for analysis
+```
+# Extract inliers
+extracted_inliers = cloud_filtered.extract(inliers, negative=False)
+
+# Save pcd for table
+# pcl.save(cloud, filename)
+filename = 'extracted_inliers.pcd'
+pcl.save(extracted_inliers, filename)
+```
+Image of Extracted inliers:
+
+```
+# Extract outliers
+extracted_outliers = cloud_filtered.extract(inliers, negative=True)
+
+# Save pcd for tabletop objects
+filename = 'extracted_outliers.pcd'
+pcl.save(extracted_outliers, filename)
+```
+Image of Extracted outliers:
+
+--- Statistical Outlier Filter ---
+The final step of exercise 1 was to complete the statistical outlier filter. This will remove any unnecessary noise from the point cloud. After this is completed we will have a more clear picture of the focal objects in the space. There was no noise in the data for this exercise so it was not effective. It will however be required in the final project requirement.
+
+```
+# Much like the previous filters, we start by creating a filter object: 
+outlier_filter = cloud_filtered.make_statistical_outlier_filter()
+
+# Set the number of neighboring points to analyze for any given point
+outlier_filter.set_mean_k(50)
+
+# Set threshold scale factor
+x = 1.0
+
+# Any point with a mean distance larger than global (mean distance+x*std_dev) will be considered outlier
+outlier_filter.set_std_dev_mul_thresh(x)
+
+# Finally call the filter function for magic
+cloud_filtered = outlier_filter.filter()
+```
 
 
 #### 2. Complete Exercise 2 steps: Pipeline including clustering for segmentation implemented.  
