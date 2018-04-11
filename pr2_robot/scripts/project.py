@@ -55,13 +55,13 @@ def pcl_callback(pcl_msg):
     pcl_data = ros_to_pcl(pcl_msg)
     
     # TODO: Statistical Outlier Filtering
-    sof = pcl_data.make_statistical_outlier_filter()
-    sof.set_mean_k(20)
-    sof.set_std_dev_mul_thresh(0.3)
-    filtered_pcl = fil.filter()
+    #sof = pcl_data.make_statistical_outlier_filter()
+    #sof.set_mean_k(20)
+    #sof.set_std_dev_mul_thresh(0.3)
+    #filtered_pcl = fil.filter()
     
     # Voxel Grid filter
-    vox = filtered_pcl.make_voxel_grid_filter()
+    vox = pcl_data.make_voxel_grid_filter()
 
     LEAF_SIZE = 0.005
     vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
