@@ -54,8 +54,14 @@ def pcl_callback(pcl_msg):
     # TODO: Convert ROS msg to PCL data
     pcl_data = ros_to_pcl(pcl_msg)
     
+    # TODO: Statistical Outlier Filtering
+    sof = pcl_data.make_statistical_outlier_filter()
+    sof.set_mean_k(20)
+    sof.set_std_dev_mul_thresh(0.3)
+    filtered_pcl = fil.filter()
+    
     # Voxel Grid filter
-    vox = pcl_data.make_voxel_grid_filter()
+    vox = filtered_pcl.make_voxel_grid_filter()
 
     LEAF_SIZE = 0.005
     vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
@@ -158,7 +164,7 @@ def pcl_callback(pcl_msg):
         ros_pcl_array = pcl_to_ros(pcl_cluster)
 
         # Compute the associated feature vector
-        chists = compute_color_histograms(ros_pcl_array, using_hsv=False)
+        chists = compute_color_histograms(ros_pcl_array, using_hsv=True)
         normals = get_normals(ros_pcl_array)
         nhists = compute_normal_histograms(normals)
         feature = np.concatenate((chists, nhists))
@@ -197,8 +203,7 @@ def pcl_callback(pcl_msg):
 # function to load parameters and request PickPlace service
 def pr2_mover(object_list):
 
-    # TODO: Initialize variables
-    num_scene = rospy.get_param('/test_scene_num')   
+    # TODO: Initialize variables 
     test_scene_num = Int32()
     object_name    = String()
     arm_name       = String()
@@ -207,7 +212,7 @@ def pr2_mover(object_list):
     
     request_params = []
     
-    test_scene_num.data = num_scene
+    test_scene_num.data = 1
 
 
     # TODO: Get/Read parameters
