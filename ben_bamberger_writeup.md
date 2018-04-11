@@ -393,10 +393,226 @@ My results in RViz for my final object recognition is shown in the screenshot be
 
 #### 1. For all three tabletop setups (`test*.world`), perform object recognition, then readsnequest output them to `.yaml` format.
 
+--- Use filtering and RANSAC plane fitting ---
+
+My first step was to apply the same filtering steps I used in thre previous exercises. (Voxel Grid to decrease data size and PassThrough Filter to look just at objects on the plane of the table)
+
+```
+# Voxel Grid filter
+    vox = pcl_data.make_voxel_grid_filter()
+
+    LEAF_SIZE = 0.005
+    vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
+
+    cloud_filtered = vox.filter()
+    
+
+    # PassThrough filter
+    pt = cloud_filtered.make_passthrough_filter()
+    filter_axis = 'z'
+    pt.set_filter_field_name(filter_axis)
+    axis_min = 0.6
+    axis_max = 1.1
+    pt.set_filter_limits(axis_min, axis_max)
+
+    cloud_filtered = pt.filter()
+```
+
+
+Then I completed the standard RANSAC plane segmentation to separate the objects from the table:
+
+```
+ # RANSAC plane segmentation
+    # Create the segmentation object
+    seg = cloud_filtered.make_segmenter()
+
+    # Set the model you wish to fit 
+    seg.set_model_type(pcl.SACMODEL_PLANE)
+    seg.set_method_type(pcl.SAC_RANSAC)
+
+    # Max distance for a point to be considered fitting the model
+    # Experiment with different values for max_distance 
+    # for segmenting the table
+    max_distance = 0.034 #increased from 0.01 because I was recognizing the front of the table as an object
+    seg.set_distance_threshold(max_distance)
+
+
+    # Call the segment function to obtain set of inlier indices and model coefficients
+    inliers, coefficients = seg.segment()
+
+    # Extract inliers
+    cloud_table = cloud_filtered.extract(inliers, negative=False)
+
+    # Extract outliers
+    cloud_objects = cloud_filtered.extract(inliers, negative=True)
+```
+
+--- Apply Euclidean clustering ---
+After filtering and RANSAC steps I am able to create k-d tree and perform Euclidean Clustering to separate the individual objects: (Notice I set the Cluster tolerance to 2x my Voxel Grid Filter LEAF_SIZE for best results, and I also increase the cluster size)
+
+```
+# TODO: Euclidean Clustering
+    white_cloud = XYZRGB_to_XYZ(cloud_objects)
+    
+    tree = white_cloud.make_kdtree()
+
+    ec = white_cloud.make_EuclideanClusterExtraction()
+
+    ec.set_ClusterTolerance(0.01) #0.01
+    ec.set_MinClusterSize(100) #25
+    ec.set_MaxClusterSize(25000) #10000
+
+    ec.set_SearchMethod(tree)
+
+    cluster_indices = ec.Extract()
+    #print(cluster_indices) #checked my parameters above for clustering
+```
+
+--- Perform object recognition ---
+Using the same for loop from Exercise 3 I was able to complete the object recognition for each cluster I separated in the Euclidean Clustering step.
+
+```
+# Classify the clusters! (loop through each detected cluster one at a time)
+    detected_objects = []
+    detected_objects_labels = []
+
+    for index, pts_list in enumerate(cluster_indices):
+
+        # Grab the points for the cluster
+        pcl_cluster = cloud_objects.extract(pts_list)
+
+        # Convert Cluster to ROS from PCL
+        ros_pcl_array = pcl_to_ros(pcl_cluster)
+
+        # Compute the associated feature vector
+        chists = compute_color_histograms(ros_pcl_array, using_hsv=False)
+        normals = get_normals(ros_pcl_array)
+        nhists = compute_normal_histograms(normals)
+        feature = np.concatenate((chists, nhists))
+
+        # Make the prediction
+        prediction = clf.predict(scaler.transform(feature.reshape(1,-1)))
+        label = encoder.inverse_transform(prediction)[0]
+        detected_objects_labels.append(label)
+
+        # Publish a label into RViz
+        label_pos = list(white_cloud[pts_list[0]])
+        label_pos[2] += 0.4
+        object_markers_pub.publish(make_label(label, label_pos, index)) 
+        # Add the detected object to the list of detected objects.
+        do = DetectedObject()
+        do.label = label
+        do.cloud = ros_pcl_array
+        detected_objects.append(do)
+
+    rospy.loginfo('Detected {} objects: {}'.format(len(detected_objects_labels), detected_objects_labels))
+    #print(detected_objects)
+    
+    if detected_objects:
+        # Publish the list of detected objects
+        detected_objects_pub.publish(detected_objects)
+        try:
+            pr2_mover(detected_objects)
+        except rospy.ROSInterruptException:
+            pass
+    else:
+        ros.loginfo("No objects detected")
+```
+
+--- Calculate the centroid ---
+Next I took my "detected_objects" and sent them to the pr2_mover function. There I calcualted the centroid of the clusters and broadcasted a message so that the pr2 simulator could pick the object.
+```
+def pr2_mover(object_list):
+
+    # TODO: Initialize variables
+    num_scene = rospy.get_param('/test_scene_num')   
+    test_scene_num = Int32()
+    object_name    = String()
+    arm_name       = String()
+    pick_pose      = Pose()
+    place_pose     = Pose()
+    
+    request_params = []
+    
+    test_scene_num.data = num_scene
+
+
+    # TODO: Get/Read parameters
+    object_list_param = rospy.get_param('/object_list')
+    print(object_list_param)
+    dropbox = rospy.get_param('/dropbox')
+
+   
+
+    # Check consistency of detected objects list
+    # if not len(detected_objects) == len(object_list_param):
+    #     rospy.loginfo("List of detected objects does not match pick list.")
+    #     return
+
+
+    # TODO: Parse parameters into individual variables
+    red_dropbox = dropbox[0]['position']
+    green_dropbox = dropbox[1]['position']
+
+    # TODO: Rotate PR2 in place to capture side tables for the collision map
+
+    # TODO: Loop through the pick list
+    for obj in object_list_param:
+
+        # TODO: Get the PointCloud for a given object and obtain it's centroid
+        object_name.data = obj['name']
+        points_arr = ros_to_pcl(obj.cloud).to_array()
+        centroids.append(np.mean(points_arr, axis=0)[:3])
+
+        
+        # TODO: Create 'pick_pose' for the object
+        pick_pose.position.x = np.asscalar(centroid[0])
+        pick_pose.position.y = np.asscalar(centroid[1])
+        pick_pose.position.z = np.asscalar(centroid[2])
+
+
+        # TODO: Assign the arm to be used for pick_place
+        if obj['group'] == 'red':
+            arm_name.data = 'left'
+            place_pose.position.x = red_dropbox[0]
+            place_pose.position.y = red_dropbox[1]
+            place_pose.position.z = red_dropbox[2]
+        elif obj['group'] == 'green':
+            arm_name.data = 'right'
+            place_pose.position.x = green_dropbox[0]
+            place_pose.position.y = green_dropbox[1]
+            place_pose.position.z = green_dropbox[2]
+
+        # TODO: Create a list of dictionaries (made with make_yaml_dict()) for later output to yaml format
+        yaml_dict = make_yaml_dict(test_scene_num, arm_name, object_name, pick_pose, place_pose)
+        request_params.append(yaml_dict)
+
+        # Wait for 'pick_place_routine' service to come up
+        rospy.wait_for_service('pick_place_routine')
+
+        try:
+            pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
+
+            # TODO: Insert your message variables to be sent as a service request
+            resp = pick_place_routine(test_scene_num, object_name, arm_name, pick_pose, place_pose)
+
+            print ("Response: ",resp.success)
+
+        except rospy.ServiceException, e:
+            print "Service call failed: %s"%e
+```
+--- Create ROS messages  and write these messages out to .yaml files ---
+Finally I simply exported my ROS output request parameters into .yaml files:
+
+    # TODO: Output your request parameters into output yaml file
+    yaml_file = "output_{}.yaml".format(num_scene)
+    send_to_yaml(yaml_file, request_params)
+
+For future improvements I would like to incorporate steps in order to create a collision map of the objects as well as the sides of the table.
+
 And here's another image! 
 ![demo-2](https://user-images.githubusercontent.com/20687560/28748286-9f65680e-7468-11e7-83dc-f1a32380b89c.png)
 
-Spend some time at the end to discuss your code, what techniques you used, what worked and why, where the implementation might fail and how you might improve it if you were going to pursue this project further.  
 
 
 
