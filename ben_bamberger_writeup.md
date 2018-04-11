@@ -195,7 +195,7 @@ For this exercise we first went through the same steps required for Exercise 1 s
 ```
 
 --- Euclidian Clustering ---
-After completing the filtering and RANSAC the next step is to preform Euclidean Clustering. First I converted XYZRGB to strictly XYZ point cloud data. Then I constructed a k-d tree from the cloud_objects point cloud. Once that was completed I could complete the cluster extraction
+After completing the filtering and RANSAC the next step is to preform Euclidean Clustering. First I converted XYZRGB to strictly XYZ point cloud data. Then I constructed a k-d tree from the cloud_objects point cloud. 
 
 ```
  
@@ -203,6 +203,9 @@ After completing the filtering and RANSAC the next step is to preform Euclidean 
     white_cloud = XYZRGB_to_XYZ(cloud_objects)
     
     tree = white_cloud.make_kdtree()
+```
+Once that was completed I could complete the cluster extraction:
+```
 
     ec = white_cloud.make_EuclideanClusterExtraction()
 
@@ -216,7 +219,10 @@ After completing the filtering and RANSAC the next step is to preform Euclidean 
     #print(cluster_indices) #checked my parameters above for clustering
 ```
 
---- Cluster Mask Point Cloud ---
+
+--- Cluster Mask Point Cloud: Visualization ---
+
+Using this cluseter data, I created ROS messages and published them to a ROS topic to view my PCL data live in RViz. To start I assigned each separate cluster a unique color in order to differentiate them:
 
 ```
  # TODO: Create Cluster-Mask Point Cloud to visualize each cluster separately
@@ -232,8 +238,10 @@ After completing the filtering and RANSAC the next step is to preform Euclidean 
     #Create new cloud containing all clusters, each with unique color
     cluster_cloud = pcl.PointCloud_PointXYZRGB()
     cluster_cloud.from_list(color_cluster_point_list)
-
-
+    
+```
+Then I converted the pcl data to a Ros message using the built-in funtions. Finally I published the ROS messages to 3 topics: 1) pcl_objects - objects on table, 2) pcl_table - table itself 3) pcl_cluster - clustered objects
+```
     # TODO: Convert PCL data to ROS messages
     ros_cloud_objects = pcl_to_ros(cloud_objects)
     ros_table = pcl_to_ros(cloud_table)
@@ -245,6 +253,7 @@ After completing the filtering and RANSAC the next step is to preform Euclidean 
     pcl_table_pub.publish(ros_table)
     pcl_cluster_pub.publish(ros_cluster_cloud)
 ```
+See screenshots from my RViz output below:
 
 #### 3. Complete Exercise 3 Steps.  Features extracted and SVM trained.  Object recognition implemented.
 Here is an example of how to include an image in your writeup.
