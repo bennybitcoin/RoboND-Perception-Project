@@ -211,6 +211,7 @@ def pr2_mover(object_list):
     place_pose     = Pose()
     
     request_params = []
+    centroids = []
     
     test_scene_num.data = 1
 
