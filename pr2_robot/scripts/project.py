@@ -242,7 +242,7 @@ def pr2_mover(object_list):
         for detected_object in object_list:
             if detected_object.label == object_name.data:
         
-                points_arr = ros_to_pcl(obj.cloud).to_array()
+                points_arr = ros_to_pcl(detected_object.cloud).to_array()
                 centroids.append(np.mean(points_arr, axis=0)[:3])
 
 
