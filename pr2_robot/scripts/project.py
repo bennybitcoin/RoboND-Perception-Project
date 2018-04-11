@@ -220,8 +220,7 @@ def pr2_mover(object_list):
     print(object_list_param)
     dropbox = rospy.get_param('/dropbox')
 
-   
-
+    
     # Check consistency of detected objects list
     # if not len(detected_objects) == len(object_list_param):
     #     rospy.loginfo("List of detected objects does not match pick list.")
@@ -239,14 +238,19 @@ def pr2_mover(object_list):
 
         # TODO: Get the PointCloud for a given object and obtain it's centroid
         object_name.data = obj['name']
-        points_arr = ros_to_pcl(obj.cloud).to_array()
-        centroids.append(np.mean(points_arr, axis=0)[:3])
-
         
-        # TODO: Create 'pick_pose' for the object
-        pick_pose.position.x = np.asscalar(centroid[0])
-        pick_pose.position.y = np.asscalar(centroid[1])
-        pick_pose.position.z = np.asscalar(centroid[2])
+        for detected_object in object_list:
+            if detected_object.label == object_name.data:
+        
+                points_arr = ros_to_pcl(obj.cloud).to_array()
+                centroids.append(np.mean(points_arr, axis=0)[:3])
+
+
+                # TODO: Create 'pick_pose' for the object
+                pick_pose.position.x = np.asscalar(centroid[0])
+                pick_pose.position.y = np.asscalar(centroid[1])
+                pick_pose.position.z = np.asscalar(centroid[2])
+                break
 
 
         # TODO: Assign the arm to be used for pick_place
@@ -267,21 +271,21 @@ def pr2_mover(object_list):
 
         # Wait for 'pick_place_routine' service to come up
         rospy.wait_for_service('pick_place_routine')
-
-        try:
-            pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
+        # not attempting pick and place
+        #try:
+        #    pick_place_routine = rospy.ServiceProxy('pick_place_routine', PickPlace)
 
             # TODO: Insert your message variables to be sent as a service request
-            resp = pick_place_routine(test_scene_num, object_name, arm_name, pick_pose, place_pose)
+         #   resp = pick_place_routine(test_scene_num, object_name, arm_name, pick_pose, place_pose)
 
-            print ("Response: ",resp.success)
+          #  print ("Response: ",resp.success)
 
-        except rospy.ServiceException, e:
-            print "Service call failed: %s"%e
+        #except rospy.ServiceException, e:
+        #    print "Service call failed: %s"%e
 
 
     # TODO: Output your request parameters into output yaml file
-    yaml_file = "output_{}.yaml".format(num_scene)
+    yaml_file = "output_{}.yaml".format(test_scene_num.data)
     send_to_yaml(yaml_file, request_params)
 
 
