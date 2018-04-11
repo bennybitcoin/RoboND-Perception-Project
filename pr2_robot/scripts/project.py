@@ -248,9 +248,9 @@ def pr2_mover(object_list):
 
 
                 # TODO: Create 'pick_pose' for the object
-                pick_pose.position.x = np.asscalar(centroid[0])
-                pick_pose.position.y = np.asscalar(centroid[1])
-                pick_pose.position.z = np.asscalar(centroid[2])
+                pick_pose.position.x = np.asscalar(centroids[0])
+                pick_pose.position.y = np.asscalar(centroids[1])
+                pick_pose.position.z = np.asscalar(centroids[2])
                 break
 
 
