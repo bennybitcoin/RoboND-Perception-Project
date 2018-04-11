@@ -213,7 +213,7 @@ def pr2_mover(object_list):
     request_params = []
     centroids = []
     
-    test_scene_num.data = 1
+    test_scene_num.data = 2
 
 
     # TODO: Get/Read parameters
