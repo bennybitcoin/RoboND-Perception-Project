@@ -244,7 +244,7 @@ def pr2_mover(object_list):
             if detected_object.label == object_name.data:
         
                 points_arr = ros_to_pcl(detected_object.cloud).to_array()
-                centroids = np.mean(points_arr, axis=0)[:3])
+                centroids = np.mean(points_arr, axis=0)[:3]
 
 
                 # TODO: Create 'pick_pose' for the object
