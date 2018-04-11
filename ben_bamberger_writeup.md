@@ -256,13 +256,142 @@ Then I converted the pcl data to a Ros message using the built-in funtions. Fina
 See screenshots from my RViz output below:
 
 #### 3. Complete Exercise 3 Steps.  Features extracted and SVM trained.  Object recognition implemented.
-Here is an example of how to include an image in your writeup.
+In this exercise I created an SVM classifier to recognize object types in my point cloud scene. The first step to creating the classifier is to create a training dataset. We do this by running the "capture_features.py" script to randomly generate our 7 objects in different 3-D orientations, this data was then saved to "training_set.sav" in the catkin workspace. Here is a screenshot from that runnning:
+
+
+Next, we use this training data to train our SVM. We do so by simply running the "train_svm.py" script included with the Exercise. The initial confusion matrices were not optimal as we were not computing histograms. Here is the code I used to create the histograms from "/sensor_stick/src/sensor_stick/features.py":
+
+```
+ # TODO: Compute histograms
+    r_hist = np.histogram(channel_1_vals, bins=32, range=(0, 256))
+    g_hist = np.histogram(channel_2_vals, bins=32, range=(0, 256))
+    b_hist = np.histogram(channel_3_vals, bins=32, range=(0, 256))
+
+    # TODO: Concatenate and normalize the histograms
+    hist_features = np.concatenate((r_hist[0], g_hist[0], b_hist[0])).astype(np.float64)
+
+    norm_features = hist_features / np.sum(hist_features)
+
+    # Generate random features for demo mode.  
+    # Replace normed_features with your feature vector
+    #normed_features = np.random.random(96) 
+    return norm_features 
+
+
+def compute_normal_histograms(normal_cloud):
+    norm_x_vals = []
+    norm_y_vals = []
+    norm_z_vals = []
+
+    for norm_component in pc2.read_points(normal_cloud,
+                                          field_names = ('normal_x', 'normal_y', 'normal_z'),
+                                          skip_nans=True):
+        norm_x_vals.append(norm_component[0])
+        norm_y_vals.append(norm_component[1])
+        norm_z_vals.append(norm_component[2])
+
+    # TODO: Compute histograms of normal values (just like with color)
+    x_hist = np.histogram(norm_x_vals, bins=32, range=(0, 256))
+    y_hist = np.histogram(norm_y_vals, bins=32, range=(0, 256))
+    z_hist = np.histogram(norm_z_vals, bins=32, range=(0, 256))
+
+    # TODO: Concatenate and normalize the histograms
+    hist_features = np.concatenate((x_hist[0], y_hist[0], z_hist[0])).astype(np.float64)
+
+    norm_features = hist_features / np.sum(hist_features)
+
+    # Generate random features for demo mode.  
+    # Replace normed_features with your feature vector
+    #normed_features = np.random.random(96)
+
+    return norm_features
+```
+To further improve my classifier I increased the object spawn iterations from 5 to 9. My results for my improved confusion matrix is shown below:
+
+
+The final step was to complete my object recognition on the love RViz data. Here is the Object Recoginition for loop that is run on each segmented cluster: (used code from previous exersizes to get the clusters)
+```
+detected_objects = []
+    detected_objects_labels = []
+
+    for index, pts_list in enumerate(cluster_indices):
+
+        # Grab the points for the cluster
+        pcl_cluster = cloud_objects.extract(pts_list)
+
+        # Convert Cluster to ROS from PCL
+        ros_pcl_array = pcl_to_ros(pcl_cluster)
+
+        # Compute the associated feature vector
+        chists = compute_color_histograms(ros_pcl_array, using_hsv=False)
+        normals = get_normals(ros_pcl_array)
+        nhists = compute_normal_histograms(normals)
+        feature = np.concatenate((chists, nhists))
+
+        # Make the prediction
+        prediction = clf.predict(scaler.transform(feature.reshape(1,-1)))
+        label = encoder.inverse_transform(prediction)[0]
+        detected_objects_labels.append(label)
+
+        # Publish a label into RViz
+        label_pos = list(white_cloud[pts_list[0]])
+        label_pos[2] += 0.4
+        object_markers_pub.publish(make_label(label, label_pos, index)) 
+        # Add the detected object to the list of detected objects.
+        do = DetectedObject()
+        do.label = label
+        do.cloud = ros_pcl_array
+        detected_objects.append(do)
+
+    rospy.loginfo('Detected {} objects: {}'.format(len(detected_objects_labels), detected_objects_labels))
+    #print(detected_objects)
+    
+    if detected_objects:
+        # Publish the list of detected objects
+        detected_objects_pub.publish(detected_objects)
+```
+
+And finally I created new ROS publishers to broadcast my object recognition results to RViz:
+
+```
+if __name__ == '__main__':
+
+    # TODO: ROS node initialization
+    rospy.init_node('clustering', anonymous = True)
+
+
+    # TODO: Create Subscribers
+    pcl_sub = rospy.Subscriber("/sensor_stick/point_cloud", pc2.PointCloud2, pcl_callback, queue_size=1)
+
+    # TODO: Create Publishers
+    pcl_objects_pub = rospy.Publisher("/pcl_objects", PointCloud2, queue_size=1)
+    pcl_table_pub = rospy.Publisher("/pcl_table", PointCloud2, queue_size=1)
+    pcl_cluster_pub = rospy.Publisher("/pcl_cluster", PointCloud2, queue_size=1)
+    object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
+    detected_objects_pub = rospy.Publisher("/detected_objects", DetectedObjectsArray, queue_size=1)
+
+    # TODO: Load Model From disk
+    model = pickle.load(open('model.sav', 'rb'))
+    clf = model['classifier']
+    encoder = LabelEncoder()
+    encoder.classes_ = model['classes']
+    scaler = model['scaler']
+
+    # Initialize color_list
+    get_color_list.color_list = []
+
+    # TODO: Spin while node is not shutdown
+    while not rospy.is_shutdown():
+        rospy.spin()
+```
+
+My results in RViz for my final object recognition is shown in the screenshot below. I was able to successfully recognize all the objects with my model:
 
 ![demo-1](https://user-images.githubusercontent.com/20687560/28748231-46b5b912-7467-11e7-8778-3095172b7b19.png)
 
 ### Pick and Place Setup
 
-#### 1. For all three tabletop setups (`test*.world`), perform object recognition, then read in respective pick list (`pick_list_*.yaml`). Next construct the messages that would comprise a valid `PickPlace` request output them to `.yaml` format.
+#### 1. For all three tabletop setups (`test*.world`), perform object recognition, then readsnequest output them to `.yaml` format.
 
 And here's another image! 
 ![demo-2](https://user-images.githubusercontent.com/20687560/28748286-9f65680e-7468-11e7-83dc-f1a32380b89c.png)
