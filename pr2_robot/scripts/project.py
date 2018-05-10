@@ -79,6 +79,16 @@ def pcl_callback(pcl_msg):
 
     cloud_filtered = pt.filter()
     
+    #added second y-axis filter
+    pt = cloud_filtered.make_passthrough_filter()
+    filter_axis = 'y'
+    pt.set_filter_field_name(filter_axis)
+    axis_min = -1
+    axis_max = 1
+    pt.set_filter_limits(axis_min, axis_max)
+
+    cloud_filtered = pt.filter()
+    
 
     # RANSAC plane segmentation
     # Create the segmentation object
